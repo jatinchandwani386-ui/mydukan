@@ -1,13 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Star, Zap } from 'lucide-react';
+import { Star, Zap, Loader2, AlertCircle } from 'lucide-react';
 
 export default function ProductCard({ product }: { product: any }) {
+  const [loading, setLoading] = useState(false);
+  const [loginAlert, setLoginAlert] = useState(false);
+
   if (!product) return null;
 
-  // Safe field extractions (Backend API + Mock schema dono support karega)
+  // Safe field extractions
   const productId = product.slug || product._id || product.id || '';
   const productDetailUrl = productId ? `/product/${productId}` : '#';
   const title = product.title || 'Untitled Product';
@@ -46,13 +50,58 @@ export default function ProductCard({ product }: { product: any }) {
     ? 'Bestseller'
     : null;
 
-  // Affiliate URL vs Product Page URL fallback:
-  // Agar Amazon buyUrl nahi hai, toh yeh webpage ka product detail page open karega taaki click fail na ho!
+  // Amazon Affiliate URL
   const rawBuyUrl =
-    product.affiliate?.buyUrl || product.buyUrl || product.affiliateUrl;
-  const hasValidExternalUrl =
-    Boolean(rawBuyUrl && rawBuyUrl !== '#' && rawBuyUrl.startsWith('http'));
-  const finalActionUrl = hasValidExternalUrl ? rawBuyUrl : productDetailUrl;
+    product.affiliate?.buyUrl ||
+    product.buyUrl ||
+    product.affiliateUrl ||
+    `https://www.amazon.in/dp/${product.affiliate?.asin || ''}`;
+
+  // ⚡ AUTOMATIC 1-CLICK CASHBACK & REDIRECT HANDLER
+  const handle1ClickBuy = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+
+    // 1. Agar User Login Nahi Hai -> English me "Please login" show karo
+    if (!token || !storedUser) {
+      setLoginAlert(true);
+      setTimeout(() => setLoginAlert(false), 3500);
+      window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const user = JSON.parse(storedUser);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+      // 2. Admin Panel mein Auto-Save intent (User, UPI, Product, 0.25% Cashback)
+      await fetch(`${apiUrl}/cashback/intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          productId: product._id || product.id,
+          productName: title,
+          purchaseAmount: currentPrice,
+        }),
+      });
+
+      // 3. User Tracking SubID ke sath Amazon URL generate karo
+      const separator = rawBuyUrl.includes('?') ? '&' : '?';
+      const targetUrlWithSubtag = `${rawBuyUrl}${separator}ascsubtag=${user.id || user._id}`;
+
+      // 4. Open Amazon in new tab
+      window.open(targetUrlWithSubtag, '_blank');
+    } catch (err) {
+      console.error('1-Click intent error:', err);
+      window.open(rawBuyUrl, '_blank');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="group relative flex flex-col w-full h-full bg-white rounded-lg border border-line shadow-card hover:shadow-popover transition-shadow duration-200 overflow-hidden">
@@ -124,15 +173,28 @@ export default function ProductCard({ product }: { product: any }) {
           </span>
         )}
 
-        {/* Action Button (View Deal) */}
-        <a
-          href={finalActionUrl}
-          target={hasValidExternalUrl ? '_blank' : '_self'}
-          rel={hasValidExternalUrl ? 'noopener noreferrer sponsored' : undefined}
-          className="mt-auto pt-2 block text-center text-sm font-semibold rounded-md bg-marigold hover:bg-marigold-dark text-indigo-dark py-2 transition-colors shadow-sm cursor-pointer"
+        {/* ⚠️ English "Please login" Warning Alert */}
+        {loginAlert && (
+          <div className="mt-1 p-1.5 bg-red-50 border border-red-200 text-red-600 text-xs font-bold rounded flex items-center justify-center gap-1 animate-bounce shadow-sm">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>Please login</span>
+          </div>
+        )}
+
+        {/* ⚡ AUTOMATIC 1-CLICK BUTTON */}
+        <button
+          onClick={handle1ClickBuy}
+          disabled={loading}
+          className="mt-auto pt-2 w-full block text-center text-xs sm:text-sm font-bold rounded-md bg-marigold hover:bg-marigold-dark text-indigo-dark py-2 transition-all shadow-sm cursor-pointer disabled:opacity-50"
         >
-          View Deal
-        </a>
+          {loading ? (
+            <span className="flex items-center justify-center gap-1.5">
+              <Loader2 size={15} className="animate-spin" /> Redirecting...
+            </span>
+          ) : (
+            'Claim 0.25% & Buy on Amazon'
+          )}
+        </button>
       </div>
     </div>
   );

@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   MapPin, Search, Heart, ChevronDown, Menu, X, 
-  User, Package, LogIn, ArrowRight 
+  User, Package, LogIn, LogOut, ArrowRight, Gift, CreditCard 
 } from 'lucide-react';
+import ClaimCashbackModal from './ClaimCashbackModal';
+import AuthModal from './AuthModal';
 
 const SEARCH_CATEGORIES = [
   'All Categories',
@@ -36,11 +38,33 @@ export default function Header() {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [tempPincode, setTempPincode] = useState('');
 
-  // Account Dropdown State
+  // Account & Auth States
   const [accountOpen, setAccountOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+  // Check user authentication from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setCurrentUser(JSON.parse(storedUser));
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  // ⚡ LISTEN FOR 'open-auth-modal' (Jab ProductCard se bina login click ho)
+  useEffect(() => {
+    const handleOpenAuth = () => setAuthModalOpen(true);
+    window.addEventListener('open-auth-modal', handleOpenAuth);
+    return () => window.removeEventListener('open-auth-modal', handleOpenAuth);
+  }, []);
 
   // Backend se products load karo suggestions ke liye
   useEffect(() => {
@@ -76,11 +100,11 @@ export default function Header() {
       return matchText && matchCat;
     });
 
-    setSuggestions(filtered.slice(0, 5)); // Top 5 results
+    setSuggestions(filtered.slice(0, 5));
     setShowSuggestions(true);
   }, [query, category, allProducts]);
 
-  // Click outside listener (suggestions & dropdowns close karne ke liye)
+  // Click outside listener
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -131,10 +155,20 @@ export default function Header() {
     setTempPincode('');
   };
 
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    setCurrentUser(null);
+    setAccountOpen(false);
+    window.location.reload();
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-indigo text-white shadow-md">
       <div className="mx-auto max-w-7xl px-4">
-        <div className="flex h-16 items-center gap-4">
+        <div className="flex h-16 items-center gap-3 sm:gap-4">
           
           {/* Mobile menu toggle */}
           <button
@@ -152,7 +186,7 @@ export default function Header() {
             </span>
           </Link>
 
-          {/* Deliver To Icon (Interactive Location Modal) */}
+          {/* Deliver To */}
           <div
             onClick={() => setLocationModalOpen(true)}
             className="hidden lg:flex items-start gap-1.5 text-sm hover:text-marigold transition-colors px-2 py-1 rounded cursor-pointer hover:bg-white/5"
@@ -165,8 +199,8 @@ export default function Header() {
             </span>
           </div>
 
-          {/* Search bar with Live Autocomplete Suggestions */}
-          <div ref={searchContainerRef} className="relative hidden sm:flex flex-1 max-w-3xl mx-2">
+          {/* Search bar with Autocomplete */}
+          <div ref={searchContainerRef} className="relative hidden sm:flex flex-1 max-w-2xl mx-1 lg:mx-2">
             <form
               onSubmit={handleSearch}
               className="flex w-full h-11 rounded-md overflow-hidden ring-2 ring-transparent focus-within:ring-marigold bg-white"
@@ -178,7 +212,7 @@ export default function Header() {
                   onClick={() => setCategoryOpen((v) => !v)}
                   className="h-full flex items-center gap-1 px-3 bg-gray-100 text-gray-700 text-sm border-r border-gray-200 hover:bg-gray-200 transition-colors"
                 >
-                  <span className="max-w-[110px] truncate">{category}</span>
+                  <span className="max-w-[100px] truncate">{category}</span>
                   <ChevronDown size={14} />
                 </button>
 
@@ -222,7 +256,7 @@ export default function Header() {
               </button>
             </form>
 
-            {/* LIVE SEARCH SUGGESTIONS DROPDOWN */}
+            {/* Suggestions Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white text-gray-900 rounded-md shadow-2xl border border-gray-200 overflow-hidden z-50">
                 <div className="p-2 text-xs font-semibold text-gray-400 border-b border-gray-100">
@@ -268,20 +302,38 @@ export default function Header() {
             )}
           </div>
 
-          {/* Right Side Icons: Wishlist + Account */}
-          <div className="ml-auto flex items-center gap-6">
+          {/* Right Side Buttons: Claim Cashback + Wishlist + Account */}
+          <div className="ml-auto flex items-center gap-3 sm:gap-5">
             
-            {/* Wishlist Icon */}
+            {/* 🎁 CLAIM 0.25% CASHBACK BUTTON */}
+            <button
+              onClick={() => {
+                if (!currentUser) {
+                  setAuthModalOpen(true);
+                } else {
+                  setClaimModalOpen(true);
+                }
+              }}
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-gray-950 px-3 sm:px-4 py-2 rounded-full shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 cursor-pointer shrink-0"
+            >
+              <Gift size={16} className="text-indigo-900" />
+              <span>Claim Cashback</span>
+              <span className="hidden md:inline bg-indigo-950 text-white text-[10px] px-1.5 py-0.5 rounded-full font-extrabold ml-0.5">
+                0.25%
+              </span>
+            </button>
+
+            {/* Wishlist */}
             <Link
               href="/wishlist"
-              className="flex flex-col items-center text-xs text-white/90 hover:text-marigold transition-colors relative"
+              className="hidden sm:flex flex-col items-center text-xs text-white/90 hover:text-marigold transition-colors"
               title="My Wishlist"
             >
-              <Heart size={21} />
+              <Heart size={20} />
               <span className="mt-0.5 font-medium">Wishlist</span>
             </Link>
 
-            {/* Account Icon with Interactive Dropdown */}
+            {/* Account Dropdown */}
             <div ref={accountRef} className="relative">
               <button
                 type="button"
@@ -290,52 +342,64 @@ export default function Header() {
                 title="Account Menu"
               >
                 <div className="h-6 w-6 rounded-full bg-marigold text-indigo-dark font-bold text-xs flex items-center justify-center shadow">
-                  A
+                  {currentUser ? currentUser.name?.charAt(0).toUpperCase() : <User size={14} />}
                 </div>
-                <span className="mt-0.5 font-medium flex items-center gap-0.5">
-                  Account <ChevronDown size={12} />
+                <span className="mt-0.5 font-medium flex items-center gap-0.5 max-w-[70px] truncate">
+                  {currentUser ? currentUser.name.split(' ')[0] : 'Account'} <ChevronDown size={12} />
                 </span>
               </button>
 
               {accountOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white text-gray-800 rounded-lg shadow-2xl border border-gray-100 py-2 z-50">
-                  <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-xs text-gray-400">Signed in as</p>
-                    <p className="text-sm font-semibold truncate text-gray-900">User Account</p>
-                  </div>
-                  <Link
-                    href="/account"
-                    onClick={() => setAccountOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <User size={16} /> My Profile
-                  </Link>
-                  <Link
-                    href="/account"
-                    onClick={() => setAccountOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <Package size={16} /> My Orders
-                  </Link>
-                  <Link
-                    href="/wishlist"
-                    onClick={() => setAccountOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <Heart size={16} /> Wishlist
-                  </Link>
-                  <div className="border-t border-gray-100 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        alert('Logged out successfully!');
-                        setAccountOpen(false);
-                      }}
-                      className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      <LogIn size={16} /> Log In / Sign Up
-                    </button>
-                  </div>
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white text-gray-800 rounded-xl shadow-2xl border border-gray-100 py-2 z-50">
+                  {currentUser ? (
+                    <>
+                      <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                        <p className="text-xs text-gray-400">Signed in as</p>
+                        <p className="text-sm font-bold text-gray-900 truncate">{currentUser.name}</p>
+                        <p className="text-xs text-gray-500">{currentUser.mobile}</p>
+                        {currentUser.upiId && (
+                          <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono">
+                            <CreditCard size={11} /> UPI: {currentUser.upiId}
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setAccountOpen(false);
+                          setClaimModalOpen(true);
+                        }}
+                        className="w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-indigo-600 font-semibold hover:bg-indigo-50"
+                      >
+                        <Gift size={16} /> Claim 0.25% Cashback
+                      </button>
+
+                      <div className="border-t border-gray-100 mt-1">
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="w-full text-left flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                        >
+                          <LogOut size={16} /> Sign Out
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-3 text-center">
+                      <p className="text-xs text-gray-500 mb-3">
+                        Sign in to claim cashback & track order rewards.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setAccountOpen(false);
+                          setAuthModalOpen(true);
+                        }}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center justify-center gap-1.5"
+                      >
+                        <LogIn size={16} /> Sign In / Register
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -344,10 +408,24 @@ export default function Header() {
         </div>
       </div>
 
+      {/* Claim Cashback Modal */}
+      <ClaimCashbackModal
+        isOpen={claimModalOpen}
+        onClose={() => setClaimModalOpen(false)}
+        onOpenAuth={() => setAuthModalOpen(true)}
+      />
+
+      {/* Auth Modal (Login / Sign Up) */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={(user) => setCurrentUser(user)}
+      />
+
       {/* Deliver To Location Modal */}
       {locationModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg p-5 max-w-sm w-full text-gray-900 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-lg p-5 max-w-sm w-full text-gray-900 shadow-2xl">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-base flex items-center gap-1.5">
                 <MapPin size={18} className="text-indigo-600" /> Choose Location
@@ -360,16 +438,13 @@ export default function Header() {
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mb-4">
-              Enter your Pincode or City to see product availability and delivery time.
-            </p>
             <form onSubmit={handleSaveLocation} className="space-y-3">
               <input
                 type="text"
                 value={tempPincode}
                 onChange={(e) => setTempPincode(e.target.value)}
-                placeholder="e.g. Mumbai 400001 or Bhopal 462001"
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-indigo-600"
+                placeholder="e.g. Bhopal 462001"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none"
                 autoFocus
               />
               <div className="flex gap-2">
@@ -382,7 +457,7 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={() => setLocationModalOpen(false)}
-                  className="px-3 py-2 border rounded text-sm text-gray-600 hover:bg-gray-50"
+                  className="px-3 py-2 border rounded text-sm"
                 >
                   Cancel
                 </button>
